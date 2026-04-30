@@ -1,0 +1,92 @@
+name: 'DataLinter'
+description: 'Run the DataLinter Docker container on your data, code, and config files.'
+
+inputs:
+  data-path:
+    description: 'Path to the data file in the repo (e.g. test/data/imbalanced_data.csv)'
+    required: true
+  code-path:
+    description: 'Path to the code file in the repo (e.g. test/code/r_snippet_imbalanced.r)'
+    required: true
+  config-path:
+    description: 'Path to the config file in the repo (e.g. config/r_modelling_config.toml)'
+    required: true
+  log-level:
+    description: 'Logging level for DataLinter (e.g., debug, info, warning, error)'
+    required: false
+    default: 'debug'
+
+outputs:
+  result:
+    description: 'DataLinter output'
+    value: ${{ steps.run_docker_image.outputs.DATA_DUMP }}
+
+runs:
+  using: 'composite'
+  steps:
+    # - name: Checkout current project repository
+    #   uses: actions/checkout@v6
+    #   with:
+    #     path: ${{ env.PROJECT_DIR_NAME }}
+
+    - id: split_paths
+      name: Split input paths into directories and filenames
+      shell: bash
+      run: |
+        echo "REPO_DATA_DIR=$(dirname '${{ inputs.data-path }}')" >> $GITHUB_OUTPUT
+        echo "TARGET_DATA_FILE=$(basename '${{ inputs.data-path }}')" >> $GITHUB_OUTPUT
+        echo "REPO_CODE_DIR=$(dirname '${{ inputs.code-path }}')" >> $GITHUB_OUTPUT
+        echo "TARGET_CODE_FILE=$(basename '${{ inputs.code-path }}')" >> $GITHUB_OUTPUT
+        echo "REPO_CONFIG_DIR=$(dirname '${{ inputs.config-path }}')" >> $GITHUB_OUTPUT
+        echo "CONFIG_FILE=$(basename '${{ inputs.config-path }}')" >> $GITHUB_OUTPUT
+
+    - id: pull_docker_image
+      name: Pull DataLinter Docker image
+      shell: bash
+      run: |
+        docker pull ghcr.io/zgornel/datalinter-compiled:latest
+
+    - id: run_docker_image
+      name: Run DataLinter Container
+      shell: bash
+      run: |
+        PROJECT_DIR="target_R_project"
+        DOCKER_CONTAINER_CODE_DIR="/tmp"
+        DOCKER_CONTAINER_DATA_DIR="/_data"
+        DOCKER_CONTAINER_CONFIG_DIR="/_config"
+        LOG_LEVEL="${{ inputs.log-level }}"
+
+        REPO_DATA_DIR="${{ steps.split_paths.outputs.REPO_DATA_DIR }}"
+        TARGET_DATA_FILE="${{ steps.split_paths.outputs.TARGET_DATA_FILE }}"
+        REPO_CODE_DIR="${{ steps.split_paths.outputs.REPO_CODE_DIR }}"
+        TARGET_CODE_FILE="${{ steps.split_paths.outputs.TARGET_CODE_FILE }}"
+        REPO_CONFIG_DIR="${{ steps.split_paths.outputs.REPO_CONFIG_DIR }}"
+        CONFIG_FILE="${{ steps.split_paths.outputs.CONFIG_FILE }}"
+
+        echo 'DATA_DUMP<<EOF' >> $GITHUB_OUTPUT
+        echo '```' >> $GITHUB_OUTPUT
+        docker run \
+                --volume=${{ github.workspace }}/${PROJECT_DIR}/${REPO_CODE_DIR}:${DOCKER_CONTAINER_CODE_DIR} \
+                --volume=${{ github.workspace }}/${PROJECT_DIR}/${REPO_DATA_DIR}:${DOCKER_CONTAINER_DATA_DIR} \
+                --volume=${{ github.workspace }}/${PROJECT_DIR}/${REPO_CONFIG_DIR}:${DOCKER_CONTAINER_CONFIG_DIR} \
+                ghcr.io/zgornel/datalinter-compiled:latest \
+                /datalinter/bin/datalinter \
+                      ${DOCKER_CONTAINER_DATA_DIR}/${TARGET_DATA_FILE} \
+                      --code-path ${DOCKER_CONTAINER_CODE_DIR}/${TARGET_CODE_FILE} \
+                      --config-path ${DOCKER_CONTAINER_CONFIG_DIR}/${CONFIG_FILE} \
+                      --print-exceptions \
+                      --log-level ${LOG_LEVEL} >> $GITHUB_OUTPUT 2>&1
+        echo '```' >> $GITHUB_OUTPUT
+        echo 'EOF' >> $GITHUB_OUTPUT
+
+    - name: Print output
+      if: github.event_name == 'pull_request'
+      shell: bash
+      run: echo "${{ steps.run_docker_image.outputs.DATA_DUMP }}"
+
+    - name: Edit PR comment
+      if: github.event_name == 'pull_request'
+      uses: thollander/actions-comment-pull-request@v3
+      with:
+        message: ${{ steps.run_docker_image.outputs.DATA_DUMP }}
+        comment_tag: datalinter

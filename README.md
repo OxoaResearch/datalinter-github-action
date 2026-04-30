@@ -26,7 +26,7 @@ jobs:
           path: ${{ env.PROJECT_DIR_NAME }}
       - id: datalinter
         name: Run DataLinter - with my custom action
-        uses: OxoaResearch/DataLinter-Action@v1
+        uses: OxoaResearch/datalinter-github-action@v1
         with:
           data-path: 'test/data/imbalanced_data.csv'
           code-path: 'test/code/r_snippet_imbalanced.r'

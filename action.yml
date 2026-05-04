@@ -27,10 +27,21 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    # - name: Checkout current project repository
-    #   uses: actions/checkout@v6
-    #   with:
-    #     path: ${{ inputs.target-project-checkout-dir }}
+    - id: check_checkout
+      name: Check if project is already checked out
+      shell: bash
+      run: |
+        if [ -d "${{ inputs.target-project-checkout-dir }}" ] && [ "$(ls -A ${{ inputs.target-project-checkout-dir }})" ]; then
+          echo "needs_checkout=false" >> $GITHUB_OUTPUT
+        else
+          echo "needs_checkout=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Checkout current project repository
+      if: steps.check_checkout.outputs.needs_checkout == 'true'
+      uses: actions/checkout@v6
+      with:
+        path: ${{ inputs.target-project-checkout-dir }}
 
     - id: split_paths
       name: Split input paths into directories and filenames

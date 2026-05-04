@@ -30,7 +30,7 @@ runs:
     # - name: Checkout current project repository
     #   uses: actions/checkout@v6
     #   with:
-    #     path: ${{ env.PROJECT_DIR_NAME }}
+    #     path: ${{ env.TARGET_PROJECT_CHECKOUT_DIR }}
 
     - id: split_paths
       name: Split input paths into directories and filenames
